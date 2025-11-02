@@ -47,7 +47,7 @@ impl Crdt for DiamondTypeDoc {
     type Version = Vec<RemoteId>;
 
     fn name() -> &'static str {
-        "diamond-type"
+        "diamond-types"
     }
     fn create(gc: bool, compression: bool, client_id: Option<u64>) -> Self {
         let mut doc = ListCRDT::new();

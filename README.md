@@ -1,9 +1,10 @@
 # Native CRDT benchmark
 
-| Tasks                   | automerge        | loro             | diamond-type    | yrs                |
-|:------------------------|:-----------------|:-----------------|:----------------|:-------------------|
-| automerge - apply       | 344.73 ± 0.84 ms | 62.59 ± 0.20 ms  | 19.67 ± 0.90 ms | 4239.71 ± 65.33 ms |
-| automerge - decode time | 394.37 ± 3.36 ms | 1.10 ± 0.006 ms  | 1.92 ± 0.01 ms  | 4.42 ± 0.01 ms     |
-| automerge - encode time | 9.37 ± 0.02 ms   | 1.34 ± 0.005 ms  | 1.17 ± 0.01 ms  | 558.97 ± 2.05 us   |
-| concurrent list inserts | 58.55 ± 0.23 ms  | 109.04 ± 0.49 ms | Unknown         | 15.21 ± 0.04 ms    |
-| list_random_insert_1k   | 265.08 ± 0.77 ms | 8.78 ± 0.019 ms  | Unknown         | 5.78 ± 0.01 ms     |
+| Tasks                             | automerge v0.7.1 (2025-10-27) | loro v1.8.1 (2025-09-23) | diamond-types v1.0.0 (2022-08-25) | yrs v0.24.0 (2025-07-09) |
+| :-------------------------------- | :---------------------------- | :----------------------- | :-------------------------------- | :----------------------- |
+| automerge - apply                 | 6919.72 ± 80.17 ms            | 144.43 ± 0.27 ms         | 15.62 ± 0.06 ms                   | 4187.30 ± 10.50 ms       |
+| automerge - decode time           | 315.83 ± 1.96 ms              | 105.80 ± 3.67 us         | 2.33 ± 0.00 ms                    | 3.83 ± 0.02 ms           |
+| automerge - encode time           | 2.70 ± 0.01 ms                | 400.95 ± 2.97 us         | 1.93 ± 0.23 ms                    | 817.95 ± 6.46 us         |
+| concurrent list inserts           | 242.13 ± 0.78 ms              | 108.45 ± 0.23 ms         | 68.40 ± 3.30 ms                   | 14.02 ± 0.06 ms          |
+| list_random_insert_1k             | 422.94 ± 4.58 ms              | 10.93 ± 0.02 ms          | 3.65 ± 0.00 ms                    | 4.87 ± 0.00 ms           |
+| parallel applying automerge edits | -                             | 1460.93 ± 3.94 ms        | 552.15 ± 10.34 ms                 | -                        |

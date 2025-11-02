@@ -120,6 +120,7 @@ impl Crdt for YrsDoc {
         self.doc
             .transact_mut()
             .apply_update(Update::decode_v2(update).unwrap())
+            .unwrap();
     }
 
     fn version(&self) -> Self::Version {
@@ -133,15 +134,17 @@ impl Crdt for YrsDoc {
         let b_to_a = other.doc.transact_mut().encode_state_as_update_v2(&a);
         self.doc
             .transact_mut()
-            .apply_update(Update::decode_v2(&b_to_a).unwrap());
+            .apply_update(Update::decode_v2(&b_to_a).unwrap())
+            .unwrap();
         other
             .doc
             .transact_mut()
-            .apply_update(Update::decode_v2(&a_to_b).unwrap());
+            .apply_update(Update::decode_v2(&a_to_b).unwrap())
+            .unwrap();
     }
 
     fn gc(&self) -> Result<bool, bool> {
-        Ok(!self.doc.options().skip_gc)
+        Ok(!self.doc.skip_gc())
     }
 
     fn compression(&self) -> Result<bool, bool> {

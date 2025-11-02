@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::Crdt;
-use loro::LoroDoc;
+use loro::{ExportMode, LoroDoc, VersionVector};
 
 pub struct Loro {
     doc: LoroDoc,
@@ -65,7 +63,7 @@ impl Crdt for Loro {
     fn get_map(&mut self) -> std::collections::HashMap<String, i32> {
         let hash_map = {
             let this = self.map.get_value().into_map().unwrap();
-            Arc::try_unwrap(this).unwrap_or_else(|arc| (*arc).clone())
+            this.unwrap()
         };
         hash_map
             .into_iter()
@@ -74,16 +72,24 @@ impl Crdt for Loro {
     }
 
     fn encode_full(&mut self) -> Vec<u8> {
-        self.doc.export_snapshot()
+        self.doc.export(ExportMode::Snapshot).unwrap()
     }
 
     fn decode_full(&mut self, update: &[u8]) {
-        self.doc.import(update).unwrap()
+        self.doc.import(update).unwrap();
     }
 
     fn merge(&mut self, other: &mut Self) {
-        let a_to_b = self.doc.export_from(&other.doc.oplog_vv());
-        let b_to_a = other.doc.export_from(&self.doc.oplog_vv());
+        let other_vv: VersionVector = other.doc.oplog_vv();
+        let self_vv: VersionVector = self.doc.oplog_vv();
+        let a_to_b = self
+            .doc
+            .export(ExportMode::updates(&other_vv))
+            .unwrap();
+        let b_to_a = other
+            .doc
+            .export(ExportMode::updates(&self_vv))
+            .unwrap();
         self.doc.import(&b_to_a).unwrap();
         other.doc.import(&a_to_b).unwrap();
     }

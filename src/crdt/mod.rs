@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 pub mod automerge;
-pub mod diamond_type;
+pub mod diamond_types;
 pub mod loro;
 pub mod yrs;
 pub trait Crdt: Sized {
