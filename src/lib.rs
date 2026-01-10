@@ -6,7 +6,7 @@ mod criterion;
 mod doc_size;
 
 pub use crdt::{
-    automerge::AutomergeDoc, diamond_type::DiamondTypeDoc, loro::Loro, merge, yocto::YOctoDoc,
+    automerge::AutomergeDoc, diamond_types::DiamondTypeDoc, loro::Loro, merge, y_octo::YOctoDoc,
     yrs::YrsDoc, Crdt,
 };
 

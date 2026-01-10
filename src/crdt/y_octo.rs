@@ -29,7 +29,6 @@ impl Crdt for YOctoDoc {
             options.client_id = client_id.unwrap();
         }
         let doc = Doc::with_options(options);
-        doc.publisher.stop();
         YOctoDoc {
             map: doc.get_or_create_map("map").unwrap(),
             list: doc.get_or_create_array("list").unwrap(),
@@ -108,7 +107,7 @@ impl Crdt for YOctoDoc {
         } else {
             update
         };
-        self.doc.apply_update_from_binary(update.to_vec()).unwrap();
+        self.doc.apply_update_from_binary_v1(update.to_vec()).unwrap();
     }
 
     fn version(&self) -> Self::Version {
@@ -120,8 +119,8 @@ impl Crdt for YOctoDoc {
         let b = other.doc.get_state_vector();
         let a_to_b = self.doc.encode_state_as_update_v1(&b).unwrap();
         let b_to_a = other.doc.encode_state_as_update_v1(&a).unwrap();
-        self.doc.apply_update_from_binary(b_to_a.to_vec()).unwrap();
-        other.doc.apply_update_from_binary(a_to_b.to_vec()).unwrap();
+        self.doc.apply_update_from_binary_v1(b_to_a.to_vec()).unwrap();
+        other.doc.apply_update_from_binary_v1(a_to_b.to_vec()).unwrap();
     }
 
     fn gc(&self) -> Result<bool, bool> {

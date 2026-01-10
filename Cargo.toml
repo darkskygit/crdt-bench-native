@@ -8,17 +8,17 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 criterion = "0.4.0"
-loro-internal = { path = "../loro/crates/loro-internal" }
+loro = "1.8.1"
 arbitrary = { version = "1.2.0", features = ["derive"] }
 enum-as-inner = "0.5.1"
 flate2 = "1.0.25"
 serde_json = "1.0.89"
-yrs = "0.16.2"
-automerge = "0.3.0"
+yrs = "0.24.0"
+automerge = "0.7.1"
 diamond-types = "1.0.0"
 arref = "0.1.0"
 indicatif = "0.17.3"
-y-octo = { path = "../y-octo/y-octo", features = ["large_refs"] }
+y-octo = { version = "0.0.2", features = ["large_refs"] }
 
 [profile.release]
 debug = true
@@ -40,5 +40,5 @@ name = "yrs"
 harness = false
 
 [[bench]]
-name = "diamond-type"
+name = "diamond-types"
 harness = false
