@@ -19,15 +19,16 @@ impl Crdt for AutomergeDoc {
         "automerge"
     }
     fn create(_gc: bool, compression: bool, client_id: Option<u64>) -> Self {
+        let actor = client_id
+            .map(|id| automerge::ActorId::from(id.to_le_bytes().to_vec()))
+            .unwrap_or_else(automerge::ActorId::random);
         let mut d = automerge::AutoCommit::new();
-        if let Some(client_id) = client_id {
-            d.set_actor(automerge::ActorId::from(client_id.to_le_bytes().to_vec()));
-        } else {
-            d.set_actor(automerge::ActorId::random());
-        }
+        d.set_actor(automerge::ActorId::from(b"crdt-bench-bootstrap".to_vec()));
         let text = d.put_object(ROOT, "text", ObjType::Text).unwrap();
         let list = d.put_object(ROOT, "list", ObjType::List).unwrap();
         let map = d.put_object(ROOT, "map", ObjType::Map).unwrap();
+        d.commit();
+        d.set_actor(actor);
         AutomergeDoc {
             doc: d,
             text,
@@ -106,47 +107,28 @@ impl Crdt for AutomergeDoc {
     }
 
     fn merge(&mut self, other: &mut Self) {
-        // other.doc.merge(&mut self.doc).unwrap();
-        // self.doc.merge(&mut other.doc).unwrap();
-        // return;
-
         let mut state_a = State::new();
         let mut state_b = State::new();
-        // sync version
-        let to_b = self.doc.sync().generate_sync_message(&mut state_a).unwrap();
-        let to_a = other
-            .doc
-            .sync()
-            .generate_sync_message(&mut state_b)
-            .unwrap();
-        other
-            .doc
-            .sync()
-            .receive_sync_message(&mut state_b, to_b)
-            .unwrap();
-        self.doc
-            .sync()
-            .receive_sync_message(&mut state_a, to_a)
-            .unwrap();
-
-        // sync state
-        let Some(to_b) = self.doc.sync().generate_sync_message(&mut state_a) else {
-            return;
-        };
-        let to_a = other
-            .doc
-            .sync()
-            .generate_sync_message(&mut state_b)
-            .unwrap();
-        other
-            .doc
-            .sync()
-            .receive_sync_message(&mut state_b, to_b)
-            .unwrap();
-        self.doc
-            .sync()
-            .receive_sync_message(&mut state_a, to_a)
-            .unwrap();
+        loop {
+            let to_b = self.doc.sync().generate_sync_message(&mut state_a);
+            let to_a = other.doc.sync().generate_sync_message(&mut state_b);
+            if to_b.is_none() && to_a.is_none() {
+                break;
+            }
+            if let Some(message) = to_b {
+                other
+                    .doc
+                    .sync()
+                    .receive_sync_message(&mut state_b, message)
+                    .unwrap();
+            }
+            if let Some(message) = to_a {
+                self.doc
+                    .sync()
+                    .receive_sync_message(&mut state_a, message)
+                    .unwrap();
+            }
+        }
     }
 
     fn version(&self) -> Self::Version {}

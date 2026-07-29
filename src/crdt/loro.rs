@@ -88,14 +88,8 @@ impl Crdt for Loro {
         other.doc.commit();
         let other_vv: VersionVector = other.doc.oplog_vv();
         let self_vv: VersionVector = self.doc.oplog_vv();
-        let a_to_b = self
-            .doc
-            .export(ExportMode::updates(&other_vv))
-            .unwrap();
-        let b_to_a = other
-            .doc
-            .export(ExportMode::updates(&self_vv))
-            .unwrap();
+        let a_to_b = self.doc.export(ExportMode::updates(&other_vv)).unwrap();
+        let b_to_a = other.doc.export(ExportMode::updates(&self_vv)).unwrap();
         self.doc.import(&b_to_a).unwrap();
         other.doc.import(&a_to_b).unwrap();
     }
