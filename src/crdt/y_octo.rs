@@ -46,6 +46,10 @@ impl Crdt for YOctoDoc {
         self.text.remove(pos as u64, len as u64).unwrap()
     }
 
+    fn text_len(&mut self) -> usize {
+        self.text.len() as usize
+    }
+
     fn get_text(&mut self) -> Box<str> {
         self.text.to_string().into_boxed_str()
     }

@@ -1,10 +1,12 @@
 # Native CRDT benchmark
 
-| Tasks                             | automerge v0.7.1 (2025-10-27) | loro v1.8.1 (2025-09-23) | diamond-types v1.0.0 (2022-08-25) | y-octo v0.0.2 (2026-01-10) | yrs v0.24.0 (2025-07-09) |
-| :-------------------------------- | :---------------------------- | :----------------------- | :-------------------------------- | :------------------------- | :----------------------- |
-| automerge - apply                 | 6919.72 ± 80.17 ms            | 144.43 ± 0.27 ms         | 15.62 ± 0.06 ms                   | 1029.72 ± 1.34 ms          | 4187.30 ± 10.50 ms       |
-| automerge - decode time           | 315.83 ± 1.96 ms              | 105.80 ± 3.67 us         | 2.33 ± 0.00 ms                    | 691.03 ± 0.72 ms           | 3.83 ± 0.02 ms           |
-| automerge - encode time           | 2.70 ± 0.01 ms                | 400.95 ± 2.97 us         | 1.93 ± 0.23 ms                    | 8.89 ± 0.20 ms             | 817.95 ± 6.46 us         |
-| concurrent list inserts           | 242.13 ± 0.78 ms              | 108.45 ± 0.23 ms         | 68.40 ± 3.30 ms                   | 9.67 ± 0.07 ms             | 14.02 ± 0.06 ms          |
-| list_random_insert_1k             | 422.94 ± 4.58 ms              | 10.93 ± 0.02 ms          | 3.65 ± 0.00 ms                    | 2.65 ± 0.01 ms             | 4.87 ± 0.00 ms           |
-| parallel applying automerge edits | -                             | 1460.93 ± 3.94 ms        | 552.15 ± 10.34 ms                 | -                          | -                        |
+| Tasks | automerge v0.10.0 (2026-06-05) | loro v1.13.7 (2026-07-15) | diamond-types v1.0.0 (2022-08-25) | y-octo v0.1.0 (2026-07-27) | yrs v0.27.3 (2026-07-13) |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| automerge - apply | 3862.98 ± 3.78 ms | 45.66 ± 0.06 ms | 9.28 ± 0.02 ms | 203.74 ± 0.43 ms | 2387.79 ± 12.86 ms |
+| automerge - decode time | 206.94 ± 1.17 ms | 73.09 ± 0.95 us | 1.49 ± 0.00 ms | 37.51 ± 0.05 ms | 2.32 ± 0.01 ms |
+| automerge - encode time | 1.71 ± 0.05 ms | 219.52 ± 3.05 us | 672.47 ± 7.71 us | 9.70 ± 0.02 ms | 459.53 ± 0.91 us |
+| concurrent list inserts | 166.52 ± 0.71 ms | 164.31 ± 0.41 ms | 34.10 ± 0.06 ms | 7.88 ± 0.02 ms | 7.55 ± 0.03 ms |
+| list_random_insert_1k | 248.13 ± 0.25 ms | 10.22 ± 0.10 ms | 2.61 ± 0.00 ms | 2.06 ± 0.01 ms | 3.16 ± 0.00 ms |
+| parallel applying automerge edits | - | 10216.50 ± 120.33 ms | 96.83 ± 0.37 ms | 1157.47 ± 14.51 ms | - |
+
+The parallel workload applies the full Automerge trace to two replicas in random batches of 1–1000 local edits, synchronizes after each pair of batches, and verifies replica convergence. Earlier parallel results used an invalid length calculation and are not comparable. With the corrected workload and the complete dependency family pinned, Loro 1.8.1 measures 231.41 ms versus 10216.50 ms for 1.13.7.

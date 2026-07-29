@@ -74,6 +74,10 @@ impl Crdt for DiamondTypeDoc {
         self.doc.delete(0, pos..len + pos);
     }
 
+    fn text_len(&mut self) -> usize {
+        self.doc.len()
+    }
+
     fn get_text(&mut self) -> Box<str> {
         self.doc.branch.content().to_string().into_boxed_str()
     }

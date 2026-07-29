@@ -1,8 +1,8 @@
 use std::io::{Read, Write};
 
 use yrs::{
-    updates::decoder::Decode, Array, ArrayRef, Doc, GetString, Map, MapRef, Options, ReadTxn,
-    StateVector, Text, TextRef, Transact, Update,
+    updates::decoder::Decode, Array, ArrayRef, ClientID, Doc, GetString, Map, MapRef, Options,
+    ReadTxn, StateVector, Text, TextRef, Transact, Update,
 };
 
 use crate::Crdt;
@@ -29,7 +29,7 @@ impl Crdt for YrsDoc {
             ..Default::default()
         };
         if client_id.is_some() {
-            options.client_id = client_id.unwrap();
+            options.client_id = ClientID::new(client_id.unwrap());
         }
         let doc = Doc::with_options(options);
         YrsDoc {
@@ -49,6 +49,10 @@ impl Crdt for YrsDoc {
     fn text_del(&mut self, pos: usize, len: usize) {
         self.text
             .remove_range(&mut self.doc.transact_mut(), pos as u32, len as u32)
+    }
+
+    fn text_len(&mut self) -> usize {
+        self.text.len(&self.doc.transact()) as usize
     }
 
     fn get_text(&mut self) -> Box<str> {

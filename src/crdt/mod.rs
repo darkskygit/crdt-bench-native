@@ -14,6 +14,7 @@ pub trait Crdt: Sized {
     fn compression(&self) -> Result<bool, bool>;
     fn text_insert(&mut self, pos: usize, text: &str);
     fn text_del(&mut self, pos: usize, len: usize);
+    fn text_len(&mut self) -> usize;
     fn get_text(&mut self) -> Box<str>;
     fn list_insert(&mut self, pos: usize, num: i32);
     fn list_del(&mut self, pos: usize, len: usize);

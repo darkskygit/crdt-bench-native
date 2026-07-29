@@ -43,6 +43,10 @@ impl Crdt for Loro {
         self.text.delete(pos, len).unwrap();
     }
 
+    fn text_len(&mut self) -> usize {
+        self.text.len_unicode()
+    }
+
     fn get_text(&mut self) -> Box<str> {
         self.text.to_string().into_boxed_str()
     }
@@ -80,6 +84,8 @@ impl Crdt for Loro {
     }
 
     fn merge(&mut self, other: &mut Self) {
+        self.doc.commit();
+        other.doc.commit();
         let other_vv: VersionVector = other.doc.oplog_vv();
         let self_vv: VersionVector = self.doc.oplog_vv();
         let a_to_b = self

@@ -2,7 +2,7 @@ use crate::Crdt;
 use automerge::{
     sync::{State, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjId, ObjType, ROOT,
+    AutoCommit, ObjId, ObjType, ReadDoc, ROOT,
 };
 
 pub struct AutomergeDoc {
@@ -47,9 +47,12 @@ impl Crdt for AutomergeDoc {
             .unwrap();
     }
 
+    fn text_len(&mut self) -> usize {
+        self.doc.length(&self.text)
+    }
+
     fn get_text(&mut self) -> Box<str> {
-        // self.doc.(&self.text).unwrap().into_boxed_str()
-        "".to_string().into_boxed_str()
+        self.doc.text(&self.text).unwrap().into_boxed_str()
     }
 
     fn list_insert(&mut self, pos: usize, num: i32) {
@@ -57,7 +60,14 @@ impl Crdt for AutomergeDoc {
     }
 
     fn list_del(&mut self, pos: usize, len: usize) {
-        self.doc.splice(&self.list, pos, len as isize, []).unwrap();
+        self.doc
+            .splice(
+                &self.list,
+                pos,
+                len as isize,
+                std::iter::empty::<automerge::hydrate::Value>(),
+            )
+            .unwrap();
     }
 
     fn get_list(&mut self) -> Vec<i32> {

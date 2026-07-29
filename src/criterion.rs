@@ -4,12 +4,13 @@ use criterion::{black_box, measurement::WallTime, BenchmarkGroup, Criterion};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use crate::{
-    automerge::{self, get_automerge_actions},
+    automerge::{self, get_automerge_actions, TextAction},
     merge, Crdt,
 };
 
 const GC: bool = false;
 const COMPRESSION: bool = false;
+const PARALLEL_EDIT_BATCH: usize = 1_000;
 
 pub fn bench_random_list_insert<C: Crdt>(n: usize) {
     let mut rng = rand::rngs::StdRng::seed_from_u64(123);
@@ -115,42 +116,40 @@ pub fn automerge_parallel<C: Crdt>(name: &str) {
             let mut crdt2 = C::create(false, false, None);
             let mut rng: StdRng = SeedableRng::seed_from_u64(1);
             let mut actions = get_automerge_actions().into_iter();
-            let mut len = 0;
-            while let Some(mut action) = actions.next() {
-                let mut a_len: isize = 0;
-                let mut b_len: isize = 0;
-                action.pos %= len as usize + 1;
-                action.del = action.del.min((len - a_len).max(0) as usize);
-                if action.del != 0 {
-                    a_len -= action.del as isize;
-                    crdt.text_del(action.pos, action.del);
-                }
-
-                if !action.ins.is_empty() {
-                    a_len += action.ins.len() as isize;
-                    crdt.text_insert(action.pos, &action.ins);
-                }
-                let r = rng.gen_range(1..11);
-                for _ in 0..r {
-                    if let Some(mut action) = actions.next() {
-                        action.pos %= len as usize + 1;
-                        action.del = action.del.min((len - a_len).max(0) as usize);
-                        if action.del != 0 {
-                            b_len -= action.del as isize;
-                            crdt2.text_del(action.pos, action.del);
-                        }
-                        if !action.ins.is_empty() {
-                            b_len += action.del as isize;
-                            crdt2.text_insert(action.pos, &action.ins);
-                        }
-                    } else {
-                        break;
+            loop {
+                let mut applied = false;
+                for crdt in [&mut crdt, &mut crdt2] {
+                    let count = rng.gen_range(1..=PARALLEL_EDIT_BATCH);
+                    for _ in 0..count {
+                        let Some(action) = actions.next() else {
+                            break;
+                        };
+                        apply_text_action(crdt, action);
+                        applied = true;
                     }
                 }
+
+                if !applied {
+                    break;
+                }
                 merge(&mut crdt, &mut crdt2);
-                len = a_len + b_len;
-                len = len.max(0);
+                assert_eq!(crdt.text_len(), crdt2.text_len());
             }
+
+            assert_eq!(crdt.get_text(), crdt2.get_text());
         })
     });
+}
+
+fn apply_text_action<C: Crdt>(crdt: &mut C, mut action: TextAction) {
+    let len = crdt.text_len();
+    action.pos %= len + 1;
+    action.del = action.del.min(len - action.pos);
+
+    if action.del != 0 {
+        crdt.text_del(action.pos, action.del);
+    }
+    if !action.ins.is_empty() {
+        crdt.text_insert(action.pos, &action.ins);
+    }
 }
