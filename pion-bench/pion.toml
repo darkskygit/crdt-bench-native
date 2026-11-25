@@ -1,0 +1,6 @@
+[package]
+name = "crdt_bench_pion"
+version = "0.1.0"
+
+[dependencies]
+crdt = { git = "https://github.com/AFK-surf/pion-packages.git", rev = "f66e02f51ba6847564822d1e23b820bcfb4c8584", subdir = "packages/crdt" }

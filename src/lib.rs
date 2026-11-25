@@ -1,4 +1,8 @@
-pub use crate::criterion::{automerge_parallel, entry};
+pub use crate::automerge::{get_automerge_actions, TextAction};
+pub use crate::criterion::{
+    automerge_parallel, entry, list_random_insert_positions, parallel_automerge_batches,
+    run_text_append, run_text_backspace, run_text_random_edits, run_text_tombstone,
+};
 
 mod automerge;
 mod crdt;

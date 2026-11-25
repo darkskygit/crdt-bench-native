@@ -39,7 +39,7 @@ impl Crdt for AutomergeDoc {
     }
 
     fn text_insert(&mut self, pos: usize, text: &str) {
-        self.doc.insert(&self.text, pos, text).unwrap();
+        self.doc.splice_text(&self.text, pos, 0, text).unwrap();
     }
 
     fn text_del(&mut self, pos: usize, len: usize) {

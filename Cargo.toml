@@ -8,17 +8,17 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 criterion = "0.4.0"
-loro = "1.13.7"
+loro = "1.19.1"
 arbitrary = { version = "1.2.0", features = ["derive"] }
 enum-as-inner = "0.5.1"
 flate2 = "1.0.25"
 serde_json = "1.0.89"
-yrs = "0.27.3"
-automerge = "0.10.0"
+yrs = "0.28.2"
+automerge = "0.12.0"
 diamond-types = "1.0.0"
 arref = "0.1.0"
 indicatif = "0.17.3"
-y-octo = { version = "0.1.0", features = ["large_refs"] }
+y-octo = { git = "https://github.com/darkskygit/y-octo.git", rev = "05e06116206619e68d1c75f716e5300ab86ac4cf", features = ["large_refs"] }
 
 [profile.release]
 debug = true

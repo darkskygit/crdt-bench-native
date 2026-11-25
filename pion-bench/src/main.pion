@@ -1,0 +1,551 @@
+///| Native benchmark runner for `crdt(pion)` matching `crdt-bench-native` Criterion workloads.
+///| Usage:
+///|   crdt_bench_pion <inputs_dir> [--check] [task_filter]
+///|
+///| Outputs machine-readable lines:
+///|   CHECK\t<task>\t<len>\t<fnv64>
+///|   SAMPLES\t<task>\t<iters>\t<us0,us1,...,us9>\t<len>\t<fnv64>
+
+import "crdt"
+
+struct Lcg32 {
+  mut s : UInt64
+}
+
+fn Lcg32::next(self : Lcg32) -> Int {
+  self.s = (self.s * 1664525UL + 1013904223UL) & 0xffffffffUL
+  (self.s >> 1).to_int()
+}
+
+fn parse_int(s : String) -> Int {
+  let mut v = 0
+  let mut i = 0
+  while i < s.length() {
+    let c = s.code_unit_at(i)
+    if c >= 48 && c <= 57 {
+      v = v * 10 + (c - 48)
+    }
+    i = i + 1
+  }
+  v
+}
+
+fn fnv64_str(s : String) -> UInt64 {
+  let mut h = 14695981039346656037UL
+  let mut i = 0
+  while i < s.length() {
+    let b = s.code_unit_at(i).to_int64().to_uint64()
+    h = (h ^ b) * 1099511628211UL
+    i = i + 1
+  }
+  h
+}
+
+struct Op {
+  pos : Int
+  del : Int
+  ins : String
+}
+
+fn load_ops(src : String) -> Array[Op] {
+  let ops : Array[Op] = Array::new()
+  let n = src.length()
+  let mut i = 0
+  while i < n {
+    let mut j = i
+    while j < n && src.code_unit_at(j) != 10 {
+      j = j + 1
+    }
+    if j > i {
+      let line = src.slice(i, j)
+      let a = line.index_of(" ")
+      let rest = line.slice(a + 1, line.length())
+      let b = rest.index_of(" ")
+      let hx = rest.slice(b + 1, rest.length())
+      let ins = if hx.length() == 0 {
+        ""
+      } else {
+        match crdt::hex_to_bytes(hx) {
+          Ok(bs) => bs.to_string()
+          Err(_) => ""
+        }
+      }
+      ops.push(Op::{
+        pos: parse_int(line.slice(0, a)),
+        del: parse_int(rest.slice(0, b)),
+        ins: ins,
+      })
+    }
+    i = j + 1
+  }
+  ops
+}
+
+fn load_ints(src : String) -> Array[Int] {
+  let out : Array[Int] = Array::new()
+  let n = src.length()
+  let mut i = 0
+  while i < n {
+    let mut j = i
+    while j < n && src.code_unit_at(j) != 10 {
+      j = j + 1
+    }
+    if j > i {
+      out.push(parse_int(src.slice(i, j)))
+    }
+    i = j + 1
+  }
+  out
+}
+
+fn merge_docs(a : crdt::Doc, b : crdt::Doc) -> Unit {
+  let sv_a = a.encode_state_vector()
+  let sv_b = b.encode_state_vector()
+  let a_to_b = match a.encode_state_as_update_from(sv_b) {
+    Ok(bs) => bs
+    Err(_) => Bytes::new(0)
+  }
+  let b_to_a = match b.encode_state_as_update_from(sv_a) {
+    Ok(bs) => bs
+    Err(_) => Bytes::new(0)
+  }
+  let _ = a.apply_update(b_to_a)
+  let _ = b.apply_update(a_to_b)
+}
+
+fn make_alpha_seed(n : Int) -> String {
+  let mut chunk = "abcdefghijklmnopqrstuvwxyz"
+  let mut res = ""
+  let mut rem = n
+  while rem > 0 {
+    if chunk.length() <= rem {
+      res = res + chunk
+      rem = rem - chunk.length()
+      if chunk.length() < rem {
+        chunk = chunk + chunk
+      }
+    } else {
+      res = res + chunk.slice(0, rem)
+      rem = 0
+    }
+  }
+  res
+}
+
+fn task_list_random_insert_1k(positions : Array[Int]) -> (Int, UInt64) {
+  let d1 = crdt::Doc::new(1UL)
+  let d2 = crdt::Doc::new(2UL)
+  let l1 = d1.get_array("list")
+  let l2 = d2.get_array("list")
+  let mut i = 0
+  while i < positions.length() {
+    l1.insert(d1, positions[i], crdt::Any::Int(i.to_int64()))
+    merge_docs(d2, d1)
+    i = i + 1
+  }
+  (l2.len(d2), 0UL)
+}
+
+fn task_concurrent_list_inserts() -> (Int, UInt64) {
+  let docs : Array[crdt::Doc] = Array::new()
+  let mut i = 0
+  while i < 100 {
+    let d = crdt::Doc::new((i + 1).to_int64().to_uint64())
+    let t = d.get_text("text")
+    t.insert(d, 0, "123")
+    docs.push(d)
+    i = i + 1
+  }
+  let mut j = 1
+  while j < 100 {
+    merge_docs(docs[0], docs[j])
+    j = j + 1
+  }
+  let mut k = 1
+  while k < 100 {
+    merge_docs(docs[k], docs[0])
+    k = k + 1
+  }
+  let t0 = docs[0].get_text("text")
+  (t0.len(docs[0]), 0UL)
+}
+
+fn task_automerge_apply(ops : Array[Op]) -> (Int, UInt64) {
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let mut i = 0
+  while i < ops.length() {
+    let op = ops[i]
+    if op.del != 0 {
+      t.delete(d, op.pos, op.del)
+    }
+    if op.ins.length() > 0 {
+      t.insert(d, op.pos, op.ins)
+    }
+    i = i + 1
+  }
+  let s = t.to_string(d)
+  (s.length(), fnv64_str(s))
+}
+
+fn build_automerge_doc(ops : Array[Op]) -> crdt::Doc {
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let mut i = 0
+  while i < ops.length() {
+    let op = ops[i]
+    if op.del != 0 {
+      t.delete(d, op.pos, op.del)
+    }
+    if op.ins.length() > 0 {
+      t.insert(d, op.pos, op.ins)
+    }
+    i = i + 1
+  }
+  d
+}
+
+fn task_automerge_encode(doc : crdt::Doc) -> (Int, UInt64) {
+  let enc = doc.encode_state_as_update()
+  (enc.length(), 0UL)
+}
+
+fn task_automerge_decode(encoded : Bytes) -> (Int, UInt64) {
+  let d = crdt::Doc::new(2UL)
+  let _ = d.apply_update(encoded)
+  let t = d.get_text("text")
+  (t.len(d), 0UL)
+}
+
+fn apply_parallel_action(doc : crdt::Doc, t : crdt::YText, op : Op) -> Unit {
+  let cur_len = t.len(doc)
+  let pos = op.pos % (cur_len + 1)
+  let max_d = cur_len - pos
+  let del = if op.del > max_d { max_d } else { op.del }
+  if del != 0 {
+    t.delete(doc, pos, del)
+  }
+  if op.ins.length() > 0 {
+    t.insert(doc, pos, op.ins)
+  }
+}
+
+fn task_parallel_automerge(ops : Array[Op], batches : Array[Int]) -> (Int, UInt64) {
+  let d1 = crdt::Doc::new(1UL)
+  let d2 = crdt::Doc::new(2UL)
+  let t1 = d1.get_text("text")
+  let t2 = d2.get_text("text")
+  let mut idx = 0
+  let mut bidx = 0
+  let total = ops.length()
+  while idx < total {
+    let c1 = if bidx < batches.length() { batches[bidx] } else { 1000 }
+    bidx = bidx + 1
+    let mut k1 = 0
+    while k1 < c1 && idx < total {
+      apply_parallel_action(d1, t1, ops[idx])
+      idx = idx + 1
+      k1 = k1 + 1
+    }
+    let c2 = if bidx < batches.length() { batches[bidx] } else { 1000 }
+    bidx = bidx + 1
+    let mut k2 = 0
+    while k2 < c2 && idx < total {
+      apply_parallel_action(d2, t2, ops[idx])
+      idx = idx + 1
+      k2 = k2 + 1
+    }
+    merge_docs(d1, d2)
+    if t1.len(d1) != t2.len(d2) {
+      return (-1, 0UL)
+    }
+  }
+  let s1 = t1.to_string(d1)
+  let s2 = t2.to_string(d2)
+  if s1 != s2 {
+    return (-2, 0UL)
+  }
+  (s1.length(), fnv64_str(s1))
+}
+
+fn task_text_append(n : Int) -> (Int, UInt64) {
+  let letters = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+    "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  ]
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let mut i = 0
+  while i < n {
+    t.insert(d, i, letters[i % 26])
+    i = i + 1
+  }
+  let s = t.to_string(d)
+  (s.length(), fnv64_str(s))
+}
+
+fn task_text_random_edits(ops : Int) -> (Int, UInt64) {
+  let words = ["a", "the ", "pion ", "crdt ", "x", "yjs ", "fast ", "sync "]
+  let rng = Lcg32::{ s: 123456789UL }
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let mut cursor = 0
+  let mut i = 0
+  while i < ops {
+    let r = rng.next()
+    let cur_len = t.len(d)
+    let mode = r % 20
+    if mode < 12 || cur_len == 0 {
+      if cursor > cur_len {
+        cursor = cur_len
+      }
+      let w = words[(r >> 4) % 8]
+      t.insert(d, cursor, w)
+      cursor = cursor + w.length()
+    } else if mode < 17 {
+      let pos = (r >> 5) % (cur_len + 1)
+      let w = words[(r >> 12) % 8]
+      t.insert(d, pos, w)
+      cursor = pos + w.length()
+    } else {
+      let pos = (r >> 5) % cur_len
+      let max_d = cur_len - pos
+      let dlen = 1 + ((r >> 12) % 4)
+      let actual_d = if dlen > max_d { max_d } else { dlen }
+      t.delete(d, pos, actual_d)
+      cursor = pos
+    }
+    i = i + 1
+  }
+  let s = t.to_string(d)
+  (s.length(), fnv64_str(s))
+}
+
+fn task_text_tombstone(n : Int) -> (Int, UInt64) {
+  let letters = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+    "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  ]
+  let rng = Lcg32::{ s: 987654321UL }
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let mut i = 0
+  while i < n {
+    t.insert(d, i, letters[i % 26])
+    i = i + 1
+  }
+  let mut p = n - 1
+  while p >= 0 {
+    if p % 2 == 1 {
+      t.delete(d, p, 1)
+    }
+    p = p - 1
+  }
+  let mut k = 0
+  while k < n / 5 {
+    let pos = rng.next() % (t.len(d) + 1)
+    t.insert(d, pos, "X")
+    k = k + 1
+  }
+  let s = t.to_string(d)
+  (s.length(), fnv64_str(s))
+}
+
+fn task_text_backspace(seed : String) -> (Int, UInt64) {
+  let d = crdt::Doc::new(1UL)
+  let t = d.get_text("text")
+  let n = seed.length()
+  t.insert(d, 0, seed)
+  let mut p = n - 1
+  while p >= 0 {
+    t.delete(d, p, 1)
+    p = p - 1
+  }
+  let s = t.to_string(d)
+  (s.length(), fnv64_str(s))
+}
+
+fn bench_task(
+  world : World,
+  name : String,
+  check_only : Bool,
+  f : () -> (Int, UInt64),
+) -> Unit {
+  if check_only {
+    let t0 = clock_monotonic_us()
+    let (len, h) = f()
+    let dt = clock_monotonic_us() - t0
+    io_println(
+      world,
+      "CHECK\t" + name + "\t" + len.to_string() + "\t" + h.to_string() + "\t" + dt.to_string() + "us",
+    )
+    return
+  }
+  // Warmup + calibrate iterations per sample (target >= 100ms per sample, 10 samples => ~1s total, matching Criterion)
+  let w0 = clock_monotonic_us()
+  let (len0, h0) = f()
+  let mut single_us = clock_monotonic_us() - w0
+  if single_us < 1L {
+    single_us = 1L
+  }
+  let mut iters = 1
+  if single_us < 100000L {
+    iters = (100000L / single_us).to_int()
+    if iters < 1 {
+      iters = 1
+    }
+    if iters > 2000 {
+      iters = 2000
+    }
+    // Second warmup batch for instruction cache / allocator stability
+    let mut w = 0
+    while w < 2 {
+      let _ = f()
+      w = w + 1
+    }
+  }
+  let mut samples = ""
+  let mut s = 0
+  let mut last_len = len0
+  let mut last_h = h0
+  while s < 10 {
+    let t0 = clock_monotonic_us()
+    let mut it = 0
+    while it < iters {
+      let (l, h) = f()
+      last_len = l
+      last_h = h
+      it = it + 1
+    }
+    let dt = clock_monotonic_us() - t0
+    if s > 0 {
+      samples = samples + ","
+    }
+    samples = samples + dt.to_string()
+    s = s + 1
+  }
+  io_println(
+    world,
+    "SAMPLES\t" +
+    name +
+    "\t" +
+    iters.to_string() +
+    "\t" +
+    samples +
+    "\t" +
+    last_len.to_string() +
+    "\t" +
+    last_h.to_string(),
+  )
+}
+
+fn should_run(filter : String, name : String) -> Bool {
+  if filter.length() == 0 {
+    true
+  } else {
+    name.index_of(filter) >= 0
+  }
+}
+
+pub fn main(world : World) -> Int {
+  let args = world_args(world)
+  if args.length() < 2 {
+    io_eprintln(world, "usage: crdt_bench_pion <inputs_dir> [--check] [task_filter]")
+    return 2
+  }
+  let dir = args[1]
+  let mut check_only = false
+  let mut filter = ""
+  let mut ai = 2
+  while ai < args.length() {
+    if args[ai] == "--check" {
+      check_only = true
+    } else {
+      filter = args[ai]
+    }
+    ai = ai + 1
+  }
+
+  let ops_src = match fs_read(world, dir + "/automerge-paper.ops") {
+    Ok(s) => s
+    Err(_) => {
+      io_eprintln(world, "cannot read " + dir + "/automerge-paper.ops")
+      return 1
+    }
+  }
+  let pos_src = match fs_read(world, dir + "/list_random_insert_1k.pos") {
+    Ok(s) => s
+    Err(_) => {
+      io_eprintln(world, "cannot read " + dir + "/list_random_insert_1k.pos")
+      return 1
+    }
+  }
+  let batch_src = match fs_read(world, dir + "/parallel_batches.txt") {
+    Ok(s) => s
+    Err(_) => {
+      io_eprintln(world, "cannot read " + dir + "/parallel_batches.txt")
+      return 1
+    }
+  }
+
+  let ops = load_ops(ops_src)
+  let positions = load_ints(pos_src)
+  let batches = load_ints(batch_src)
+  let seed50k = make_alpha_seed(50000)
+
+  if should_run(filter, "list_random_insert_1k") {
+    bench_task(world, "list_random_insert_1k", check_only, fn() {
+      task_list_random_insert_1k(positions)
+    })
+  }
+  if should_run(filter, "concurrent list inserts") {
+    bench_task(world, "concurrent list inserts", check_only, fn() {
+      task_concurrent_list_inserts()
+    })
+  }
+  if should_run(filter, "automerge - apply") {
+    bench_task(world, "automerge - apply", check_only, fn() {
+      task_automerge_apply(ops)
+    })
+  }
+  if should_run(filter, "automerge - encode time") || should_run(filter, "automerge - decode time") {
+    let finished = build_automerge_doc(ops)
+    if should_run(filter, "automerge - encode time") {
+      bench_task(world, "automerge - encode time", check_only, fn() {
+        task_automerge_encode(finished)
+      })
+    }
+    if should_run(filter, "automerge - decode time") {
+      let encoded = finished.encode_state_as_update()
+      bench_task(world, "automerge - decode time", check_only, fn() {
+        task_automerge_decode(encoded)
+      })
+    }
+  }
+  if should_run(filter, "text - append 50k") {
+    bench_task(world, "text - append 50k", check_only, fn() {
+      task_text_append(50000)
+    })
+  }
+  if should_run(filter, "text - random edits 20k") {
+    bench_task(world, "text - random edits 20k", check_only, fn() {
+      task_text_random_edits(20000)
+    })
+  }
+  if should_run(filter, "text - tombstone 50k") {
+    bench_task(world, "text - tombstone 50k", check_only, fn() {
+      task_text_tombstone(50000)
+    })
+  }
+  if should_run(filter, "text - backspace 50k") {
+    bench_task(world, "text - backspace 50k", check_only, fn() {
+      task_text_backspace(seed50k)
+    })
+  }
+  if should_run(filter, "parallel applying automerge edits") {
+    bench_task(world, "parallel applying automerge edits", check_only, fn() {
+      task_parallel_automerge(ops, batches)
+    })
+  }
+  0
+}

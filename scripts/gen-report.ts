@@ -3,7 +3,9 @@ import { existsSync } from "https://deno.land/std@0.105.0/fs/exists.ts";
 const { __dirname } = __(import.meta);
 import { resolve } from "https://deno.land/std@0.105.0/path/mod.ts";
 
-const CRITERION_DIR = resolve(__dirname, "../target/criterion");
+const TARGET_DIR = Deno.env.get("CARGO_TARGET_DIR") ??
+  resolve(__dirname, "../target");
+const CRITERION_DIR = resolve(TARGET_DIR, "criterion");
 
 interface Task {
   task: string;
@@ -41,8 +43,7 @@ interface CratesIoResponse {
 }
 
 interface CrateMetadata {
-  version: string;
-  releaseDate: string;
+  label: string;
 }
 
 async function readCrate(crate: string): Promise<Task[]> {
@@ -83,7 +84,7 @@ async function readTask(path: string, crate: string): Promise<Task> {
   };
 }
 
-const CRATES = [
+const BASE_CRATES = [
   "automerge",
   "loro",
   "diamond-types",
@@ -91,81 +92,85 @@ const CRATES = [
   "yrs",
 ] as const;
 
-type CrateName = typeof CRATES[number];
+const PION_CRATE = "crdt(pion)" as const;
+const includePion = existsSync(resolve(CRITERION_DIR, PION_CRATE));
+const CRATES: readonly string[] = includePion
+  ? [...BASE_CRATES, PION_CRATE]
+  : [...BASE_CRATES];
 
-async function readCrateVersionsFromCargo(): Promise<Record<CrateName, string>> {
+async function readCrateSpecFromCargo(
+  crate: string,
+): Promise<{ version?: string; rev?: string }> {
   const cargoTomlPath = resolve(__dirname, "../Cargo.toml");
   const manifest = await Deno.readTextFile(cargoTomlPath);
-  const lookup: Partial<Record<CrateName, string>> = {};
+  const escapedCrate = crate.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 
-  for (const crate of CRATES) {
-    const escapedCrate = crate.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-    const directMatch = new RegExp(
-      `^\\s*${escapedCrate}\\s*=\\s*"([^"\\n]+)"`,
-      "m",
-    ).exec(manifest);
-
-    const inlineTableMatch = new RegExp(
-      `^\\s*${escapedCrate}\\s*=\\s*\\{[^\\n]*version\\s*=\\s*"([^"\\n]+)"`,
-      "m",
-    ).exec(manifest);
-
-    const version = directMatch?.[1] ?? inlineTableMatch?.[1];
-    if (!version) {
-      throw new Error(`could not find version for crate ${crate} in Cargo.toml`);
-    }
-
-    lookup[crate] = version;
+  const directMatch = new RegExp(
+    `^\\s*${escapedCrate}\\s*=\\s*"([^"\\n]+)"`,
+    "m",
+  ).exec(manifest);
+  if (directMatch?.[1]) {
+    return { version: directMatch[1] };
   }
 
-  return lookup as Record<CrateName, string>;
+  const inlineTableMatch = new RegExp(
+    `^\\s*${escapedCrate}\\s*=\\s*\\{([^\\n]+)\\}`,
+    "m",
+  ).exec(manifest);
+  if (inlineTableMatch?.[1]) {
+    const body = inlineTableMatch[1];
+    const version = /version\s*=\s*"([^"\n]+)"/.exec(body)?.[1];
+    const rev = /rev\s*=\s*"([^"\n]+)"/.exec(body)?.[1];
+    if (version || rev) {
+      return { version, rev };
+    }
+  }
+
+  throw new Error(`could not find spec for crate ${crate} in Cargo.toml`);
 }
 
-/**
- * Fetch metadata for the specified crate version from crates.io.
- * Run this script with `--allow-net` so Deno can reach the crates.io API.
- */
-async function fetchCrateMetadata(
-  crate: CrateName,
-  version: string,
-): Promise<CrateMetadata> {
+async function fetchCrateMetadata(crate: string): Promise<CrateMetadata> {
+  if (crate === PION_CRATE) {
+    const pionToml = await Deno.readTextFile(
+      resolve(__dirname, "../pion-bench/pion.toml"),
+    );
+    const rev = /rev\s*=\s*"([^"\n]+)"/.exec(pionToml)?.[1]?.slice(0, 7);
+    return {
+      label: rev ? `crdt(pion) v0.2.0 (${rev})` : "crdt(pion) v0.2.0",
+    };
+  }
+
+  const spec = await readCrateSpecFromCargo(crate);
+  if (spec.rev && !spec.version) {
+    return { label: `${crate} (${spec.rev.slice(0, 7)})` };
+  }
+
+  const version = spec.version!;
   const response = await fetch(`https://crates.io/api/v1/crates/${crate}`);
   if (!response.ok) {
-    throw new Error(
-      `failed to fetch crate metadata for ${crate}: ${response.status} ${response.statusText}`,
-    );
+    return { label: `${crate} v${version}` };
   }
 
   const payload: CratesIoResponse = await response.json();
   const versionRecord = payload.versions.find((entry) => entry.num === version);
-
-  if (!versionRecord) {
-    throw new Error(
-      `version ${version} for crate ${crate} not found on crates.io; check Cargo.toml`,
-    );
-  }
-
-  const releaseDate = versionRecord?.created_at?.slice(0, 10) ?? "unknown";
+  const releaseDate = versionRecord?.created_at?.slice(0, 10);
 
   return {
-    version,
-    releaseDate,
+    label: releaseDate
+      ? `${crate} v${version} (${releaseDate})`
+      : `${crate} v${version}`,
   };
 }
-
-const crateVersions = await readCrateVersionsFromCargo();
 
 const [results, metadataEntries] = await Promise.all([
   Promise.all(CRATES.map((crate) => readCrate(crate))),
   Promise.all(
-    CRATES.map(async (crate) =>
-      [crate, await fetchCrateMetadata(crate, crateVersions[crate])] as const
-    ),
+    CRATES.map(async (crate) => [crate, await fetchCrateMetadata(crate)] as const),
   ),
 ]);
 
 const crateMetadata = Object.fromEntries(metadataEntries) as Record<
-  CrateName,
+  string,
   CrateMetadata
 >;
 
@@ -188,10 +193,7 @@ for (let i = 0; i < CRATES.length; i++) {
   }
 }
 
-const headerCells = CRATES.map((crate) => {
-  const meta = crateMetadata[crate];
-  return `${crate} v${meta.version} (${meta.releaseDate})`;
-});
+const headerCells = CRATES.map((crate) => crateMetadata[crate].label);
 
 console.log(`| Tasks | ${headerCells.join(" | ")} |`);
 console.log(`| :---- | ${CRATES.map(() => ":----").join(" | ")} |`);

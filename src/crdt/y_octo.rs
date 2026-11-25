@@ -111,9 +111,7 @@ impl Crdt for YOctoDoc {
         } else {
             update
         };
-        self.doc
-            .apply_update_from_binary_v1(update.to_vec())
-            .unwrap();
+        self.doc.apply_update_from_binary_v1(update).unwrap();
     }
 
     fn version(&self) -> Self::Version {
@@ -125,17 +123,12 @@ impl Crdt for YOctoDoc {
         let b = other.doc.get_state_vector();
         let a_to_b = self.doc.encode_state_as_update_v1(&b).unwrap();
         let b_to_a = other.doc.encode_state_as_update_v1(&a).unwrap();
-        self.doc
-            .apply_update_from_binary_v1(b_to_a.to_vec())
-            .unwrap();
-        other
-            .doc
-            .apply_update_from_binary_v1(a_to_b.to_vec())
-            .unwrap();
+        self.doc.apply_update_from_binary_v1(&b_to_a).unwrap();
+        other.doc.apply_update_from_binary_v1(&a_to_b).unwrap();
     }
 
     fn gc(&self) -> Result<bool, bool> {
-        Ok(!self.doc.options().gc)
+        Ok(self.doc.options().gc)
     }
 
     fn compression(&self) -> Result<bool, bool> {
